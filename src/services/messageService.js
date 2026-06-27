@@ -23,3 +23,15 @@ export const addReaction = (messageId, emoji) => {
 export const removeReaction = (messageId) => {
   return api.delete(`/messages/${messageId}/reaction`);
 };
+
+export const toggleStarMessage = (messageId) => {
+  return api.put(`/messages/${messageId}/star`);
+};
+
+export const forwardMessage = (messageId, targetConversationIds) => {
+  return api.post(`/messages/${messageId}/forward`, { targetConversationIds });
+};
+
+export const searchMessages = (conversationId, q) => {
+  return api.get(`/messages/${conversationId}/search?q=${encodeURIComponent(q)}`);
+};

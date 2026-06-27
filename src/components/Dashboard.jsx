@@ -25,7 +25,10 @@ export default function Dashboard() {
     conversations, activeConversation, setActiveConversation, messages, 
     typingUsers, onlineStatuses, startConversation, startGroupConversation, 
     sendMessageText, sendFileMessage, sendVoiceNoteMessage, 
-    deleteMessageById, toggleMessageReaction, sendTypingStatus 
+    deleteMessageById, toggleMessageReaction, sendTypingStatus,
+    starMessage, forwardMessage, searchChatMessages,
+    pinConversation, archiveConversation, muteConversation, setChatWallpaper,
+    socketConnected
   } = useChat();
 
   const {
@@ -51,6 +54,17 @@ export default function Dashboard() {
   const [replyTo, setReplyTo] = useState(null);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [fileAccept, setFileAccept] = useState('*');
+
+  // WhatsApp Preference & Search states
+  const [showArchivedOnly, setShowArchivedOnly] = useState(false);
+  const [dropdownOpenConvId, setDropdownOpenConvId] = useState(null);
+  const [rightSidebarTab, setRightSidebarTab] = useState('info'); // 'info' | 'search'
+  const [msgSearchQuery, setMsgSearchQuery] = useState('');
+  const [msgSearchResults, setMsgSearchResults] = useState([]);
+  const [forwardingMsg, setForwardingMsg] = useState(null);
+
+  const activeMyMember = activeConversation?.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+  const activeWallpaper = activeMyMember?.wallpaper || '';
 
   const renderTicks = (msg) => {
     if (msg.sender !== user._id && msg.sender?._id !== user._id) return null;
@@ -260,12 +274,42 @@ export default function Dashboard() {
     return target?.user?.name?.toLowerCase().includes(term);
   });
 
+  // Sort: pinned first, then last updated
+  const sortedConversations = [...filteredConversations].sort((a, b) => {
+    const aMember = a.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+    const bMember = b.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+    const aPinned = aMember?.pinned ? 1 : 0;
+    const bPinned = bMember?.pinned ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+    return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+  });
+
+  // Filter based on Archive view status
+  const displayConversations = sortedConversations.filter(c => {
+    const myMember = c.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+    const isArchived = myMember?.archived || false;
+    return showArchivedOnly ? isArchived : !isArchived;
+  });
+
+  // Count active archives
+  const archivedCount = conversations.filter(c => {
+    const myMember = c.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+    return myMember?.archived || false;
+  }).length;
+
   return (
     <div className="dashboard-container">
       {/* Sidebar navigation */}
       <div className={`sidebar-container ${mobileMenuOpen ? 'open' : ''} ${activeConversation && activeTab === 'chat' ? 'hidden-mobile' : ''}`}>
-        <div className="sidebar-header">
-          <Logo size={28} />
+        <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Logo size={28} />
+            {!socketConnected && (
+              <span style={{ fontSize: '0.7rem', background: 'var(--highlight)', color: '#FFF', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }} title="Realtime server disconnected">
+                Offline
+              </span>
+            )}
+          </div>
           <button type="button" className="btn-icon mobile-sidebar-toggle" onClick={() => setMobileMenuOpen(false)}>
             <X size={16} />
           </button>
@@ -303,13 +347,53 @@ export default function Dashboard() {
         <div className="sidebar-scroll-area" style={{ flex: 1, overflowY: 'auto' }}>
           {activeTab === 'chat' && (
             <>
-              {filteredConversations.length === 0 ? (
+              {/* Archive triggers */}
+              {!showArchivedOnly && archivedCount > 0 && (
+                <div 
+                  onClick={() => setShowArchivedOnly(true)}
+                  style={{
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid var(--glass-border)',
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    background: 'rgba(0,0,0,0.02)',
+                    fontWeight: '500'
+                  }}
+                >
+                  📁 Archived Chats ({archivedCount})
+                </div>
+              )}
+              {showArchivedOnly && (
+                <div 
+                  onClick={() => setShowArchivedOnly(false)}
+                  style={{
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid var(--glass-border)',
+                    fontSize: '0.85rem',
+                    color: 'var(--highlight)',
+                    background: 'rgba(0,0,0,0.02)',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  ← Active Chats
+                </div>
+              )}
+
+              {displayConversations.length === 0 ? (
                 <div style={{ padding: '2rem', textAlign: 'center', opacity: 0.6, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                  Start a conversation
+                  {showArchivedOnly ? 'No archived chats' : 'Start a conversation'}
                 </div>
               ) : (
                 <ul className="sidebar-list">
-                  {filteredConversations.map(c => {
+                  {displayConversations.map(c => {
                     const target = c.type === 'direct' ? c.participants?.find(p => p.user?._id !== user._id) : null;
                     const displayName = c.type === 'group' ? c.name : (target?.user?.name || 'Saved Space');
                     const displayAvatar = c.type === 'group' 
@@ -317,6 +401,11 @@ export default function Dashboard() {
                       : (target?.user?.avatar?.url || target?.user?.avatar || '');
                     const isActive = activeConversation?._id === c._id;
                     const unreadCount = c.unreadCounts?.[user._id] || 0;
+                    
+                    const myMemberObj = c.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+                    const isPinned = myMemberObj?.pinned || false;
+                    const isMuted = myMemberObj?.muted || false;
+                    const isArchived = myMemberObj?.archived || false;
                     
                     return (
                       <li 
@@ -326,17 +415,80 @@ export default function Dashboard() {
                           setActiveConversation(c);
                           setActiveTab('chat');
                         }}
+                        style={{ position: 'relative' }}
                       >
                         <span className="sidebar-item-left">
                           <img src={displayAvatar} alt={displayName} className="sidebar-avatar" />
                           <div>
-                            <div style={{ fontWeight: '600' }}>{displayName}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+                              <span>{displayName}</span>
+                              {isPinned && <span title="Pinned Chat" style={{ color: 'var(--highlight)', fontSize: '0.85rem' }}>📌</span>}
+                              {isMuted && <span title="Muted Chat" style={{ opacity: 0.6, fontSize: '0.85rem' }}>🔕</span>}
+                            </div>
                             <div style={{ fontSize: '0.75rem', opacity: 0.75 }}>
                               {c.lastMessage?.text || (c.lastMessage?.type === 'voice' ? '🎤 Voice Note' : c.lastMessage?.type === 'file' ? '📁 Shared file' : 'No messages yet')}
                             </div>
                           </div>
                         </span>
-                        {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                          {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+                          <div 
+                            className="conv-actions-trigger" 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setDropdownOpenConvId(dropdownOpenConvId === c._id ? null : c._id); 
+                            }}
+                            style={{ cursor: 'pointer', opacity: 0.6, padding: '2px' }}
+                          >
+                            ▼
+                          </div>
+                        </div>
+
+                        {dropdownOpenConvId === c._id && (
+                          <div 
+                            className="conv-dropdown-menu glass" 
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              position: 'absolute',
+                              top: '40px',
+                              right: '10px',
+                              background: 'var(--white)',
+                              border: '1px solid var(--glass-border)',
+                              borderRadius: '8px',
+                              padding: '4px',
+                              zIndex: 200,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
+                              boxShadow: 'var(--shadow-md)',
+                              minWidth: '120px'
+                            }}
+                          >
+                            <button 
+                              type="button" 
+                              onClick={() => { pinConversation(c._id); setDropdownOpenConvId(null); }}
+                              style={{ padding: '6px 10px', border: 'none', background: 'transparent', textAlign: 'left', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--primary-dark)', display: 'block', width: '100%' }}
+                            >
+                              {isPinned ? '📌 Unpin Chat' : '📌 Pin Chat'}
+                            </button>
+                            <button 
+                              type="button" 
+                              onClick={() => { archiveConversation(c._id); setDropdownOpenConvId(null); }}
+                              style={{ padding: '6px 10px', border: 'none', background: 'transparent', textAlign: 'left', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--primary-dark)', display: 'block', width: '100%' }}
+                            >
+                              {isArchived ? '📁 Unarchive' : '📁 Archive'}
+                            </button>
+                            <button 
+                              type="button" 
+                              onClick={() => { muteConversation(c._id); setDropdownOpenConvId(null); }}
+                              style={{ padding: '6px 10px', border: 'none', background: 'transparent', textAlign: 'left', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--primary-dark)', display: 'block', width: '100%' }}
+                            >
+                              {isMuted ? '🔊 Unmute' : '🔇 Mute'}
+                            </button>
+                          </div>
+                        )}
+
                         {c.type === 'direct' && target?.user && (
                           <span className={`status-indicator ${onlineStatuses[target.user._id] || (target.user.online ? 'online' : 'offline')}`}></span>
                         )}
@@ -550,7 +702,12 @@ export default function Dashboard() {
                 })()}
               </div>
               
-              <div className="topbar-right">
+              <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {!socketConnected && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--highlight)', fontWeight: 'bold', marginRight: '6px' }}>
+                    ⚠️ Reconnecting...
+                  </span>
+                )}
                 <button 
                   type="button" 
                   className="btn-icon" 
@@ -577,7 +734,26 @@ export default function Dashboard() {
                 >
                   <Video size={16} />
                 </button>
-                <button type="button" className={`btn-icon ${showRightSidebar ? 'active' : ''}`} onClick={() => setShowRightSidebar(!showRightSidebar)}>
+                <button 
+                  type="button" 
+                  className={`btn-icon ${rightSidebarTab === 'search' && showRightSidebar ? 'active' : ''}`}
+                  onClick={() => {
+                    setRightSidebarTab('search');
+                    setShowRightSidebar(true);
+                  }}
+                  title="Search Messages"
+                >
+                  <Search size={16} />
+                </button>
+                <button 
+                  type="button" 
+                  className={`btn-icon ${rightSidebarTab === 'info' && showRightSidebar ? 'active' : ''}`} 
+                  onClick={() => {
+                    setRightSidebarTab('info');
+                    setShowRightSidebar(!showRightSidebar || rightSidebarTab !== 'info');
+                  }}
+                  title="Group Info"
+                >
                   <Info size={16} />
                 </button>
               </div>
@@ -587,7 +763,7 @@ export default function Dashboard() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                 
                 {/* Message logs scroll area */}
-                <div className="chat-messages-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                <div className="chat-messages-scroll" style={{ flex: 1, overflowY: 'auto', backgroundColor: activeWallpaper || undefined }}>
                   {messages.length === 0 ? (
                     <div className="flex-center" style={{ height: '100%', flexDirection: 'column', padding: '2rem', opacity: 0.6, gap: '12px', textAlign: 'center' }}>
                       <MessageSquare size={48} style={{ color: 'var(--secondary)' }} />
@@ -614,7 +790,7 @@ export default function Dashboard() {
                             </div>
                           )}
                           
-                          <div className={`message-bubble-wrapper ${isSelf ? 'self' : ''}`}>
+                          <div id={`msg-${msg._id}`} className={`message-bubble-wrapper ${isSelf ? 'self' : ''}`} style={{ transition: 'background-color 0.5s ease' }}>
                             <div className="message-bubble-content">
                               {!isSelf && <span className="message-sender">{senderName}</span>}
                               
@@ -669,6 +845,10 @@ export default function Dashboard() {
                                 
                                 {isSelf && renderTicks(msg)}
 
+                                {msg.starredBy?.includes(user._id) && (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--highlight)', marginLeft: '4px' }}>★</span>
+                                )}
+
                                 {/* Actions row */}
                                 <div className="message-actions-row" style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.6 }}>
                                   {!msg.isDeleted && (
@@ -679,6 +859,28 @@ export default function Dashboard() {
                                       title="Reply to message"
                                     >
                                       <CornerUpLeft size={12} />
+                                    </button>
+                                  )}
+
+                                  {!msg.isDeleted && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => starMessage(msg._id)} 
+                                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: msg.starredBy?.includes(user._id) ? 'var(--highlight)' : 'inherit' }}
+                                      title="Star message"
+                                    >
+                                      ★
+                                    </button>
+                                  )}
+
+                                  {!msg.isDeleted && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => setForwardingMsg(msg)} 
+                                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                                      title="Forward message"
+                                    >
+                                      ➔
                                     </button>
                                   )}
 
@@ -838,54 +1040,215 @@ export default function Dashboard() {
 
               </div>
 
-              {/* Right context sidebar */}
-              {showRightSidebar && (
-                <div className="right-sidebar-container">
-                  <div className="rside-header">
-                    <h3>Space Context</h3>
-                    <button type="button" className="btn-close-modal" onClick={() => setShowRightSidebar(false)}>
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <div className="rside-content">
-                    {activeConversation.type === 'group' ? (
-                      <div>
-                        <h4>Group Name</h4>
-                        <h3>{activeConversation.name}</h3>
-                        <div style={{ marginTop: '1rem' }}>
-                          <h4>Participants</h4>
-                          <ul style={{ listStyle: 'none', padding: 0 }}>
-                            {activeConversation.participants?.map(p => (
-                              <li key={p.user?._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
-                                <img src={p.user?.avatar?.url || p.user?.avatar} alt={p.user?.name} style={{ width: '24px', height: '24px', borderRadius: '50%' }} />
-                                <span>{p.user?.name}</span>
-                              </li>
-                            ))}
-                          </ul>
+            {/* Right context sidebar */}
+            {showRightSidebar && (
+              <div className="right-sidebar-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="rside-header">
+                  <h3>{rightSidebarTab === 'info' ? 'Space Context' : 'Search Messages'}</h3>
+                  <button type="button" className="btn-close-modal" onClick={() => setShowRightSidebar(false)}>
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', borderBottom: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.02)' }}>
+                  <button 
+                    type="button" 
+                    onClick={() => setRightSidebarTab('info')}
+                    style={{ 
+                      flex: 1, 
+                      padding: '10px', 
+                      border: 'none', 
+                      background: rightSidebarTab === 'info' ? 'var(--white)' : 'transparent',
+                      fontWeight: rightSidebarTab === 'info' ? 'bold' : 'normal',
+                      borderBottom: rightSidebarTab === 'info' ? '2px solid var(--secondary)' : 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      color: 'var(--primary-dark)'
+                    }}
+                  >
+                    Info
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setRightSidebarTab('search')}
+                    style={{ 
+                      flex: 1, 
+                      padding: '10px', 
+                      border: 'none', 
+                      background: rightSidebarTab === 'search' ? 'var(--white)' : 'transparent',
+                      fontWeight: rightSidebarTab === 'search' ? 'bold' : 'normal',
+                      borderBottom: rightSidebarTab === 'search' ? '2px solid var(--secondary)' : 'none',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      color: 'var(--primary-dark)'
+                    }}
+                  >
+                    Search
+                  </button>
+                </div>
+
+                <div className="rside-content" style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+                  {rightSidebarTab === 'info' ? (
+                    <div>
+                      {activeConversation.type === 'group' ? (
+                        <div>
+                          <h4>Group Name</h4>
+                          <h3>{activeConversation.name}</h3>
+                          <div style={{ marginTop: '1rem' }}>
+                            <h4>Participants</h4>
+                            <ul style={{ listStyle: 'none', padding: 0 }}>
+                              {activeConversation.participants?.map(p => (
+                                <li key={p.user?._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
+                                  <img src={p.user?.avatar?.url || p.user?.avatar} alt={p.user?.name} style={{ width: '24px', height: '24px', borderRadius: '50%' }} />
+                                  <span>{p.user?.name}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <h4>Direct Message Partner</h4>
+                          {(() => {
+                            const partner = activeConversation.participants?.find(p => p.user?._id !== user._id)?.user;
+                            return partner ? (
+                              <div className="rside-profile">
+                                <img src={partner.avatar?.url || partner.avatar} alt={partner.name} />
+                                <h3>{partner.name}</h3>
+                                <p>{partner.bio || 'SyncSpace Contributor'}</p>
+                                {partner.statusMessage && <p style={{ fontSize: '0.8rem', fontStyle: 'italic', opacity: 0.8 }}>"{partner.statusMessage}"</p>}
+                              </div>
+                            ) : <p>Saved space</p>;
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Solid color Wallpaper selector */}
+                      <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+                        <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Chat Wallpaper</h4>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          {['default', '#DBE2DC', '#335765', '#74A8A4', '#B6D9E0', '#f4eedd', '#e5ddd5'].map(color => {
+                            const activeMyMember = activeConversation?.participants?.find(p => p.user?._id === user._id || p.user === user._id);
+                            const activeWallpaper = activeMyMember?.wallpaper || '';
+                            const isMatch = color === 'default' ? !activeWallpaper : activeWallpaper === color;
+                            return (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => setChatWallpaper(activeConversation._id || activeConversation.id, color === 'default' ? '' : color)}
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  borderRadius: '50%',
+                                  backgroundColor: color === 'default' ? '#e5ddd5' : color,
+                                  border: isMatch ? '2px solid var(--highlight)' : '1px solid rgba(0,0,0,0.15)',
+                                  cursor: 'pointer'
+                                }}
+                                title={color === 'default' ? 'Default Wallpaper' : color}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
-                    ) : (
-                      <div>
-                        <h4>Direct Message Partner</h4>
-                        {(() => {
-                          const partner = activeConversation.participants?.find(p => p.user?._id !== user._id)?.user;
-                          return partner ? (
-                            <div className="rside-profile">
-                              <img src={partner.avatar?.url || partner.avatar} alt={partner.name} />
-                              <h3>{partner.name}</h3>
-                              <p>{partner.bio || 'SyncSpace Contributor'}</p>
-                              {partner.statusMessage && <p style={{ fontSize: '0.8rem', fontStyle: 'italic', opacity: 0.8 }}>"{partner.statusMessage}"</p>}
-                            </div>
-                          ) : <p>Saved space</p>;
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
-            </div>
+                      {/* Starred Messages Section */}
+                      {(() => {
+                        const starredMessages = messages.filter(m => m.starredBy?.includes(user._id) || m.starredBy?.some(u => u === user._id || u?._id === user._id));
+                        return (
+                          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+                            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Starred Messages ({starredMessages.length})</h4>
+                            {starredMessages.length === 0 ? (
+                              <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>No starred messages in this chat.</p>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {starredMessages.map(m => (
+                                  <div 
+                                    key={m._id} 
+                                    onClick={() => {
+                                      const el = document.getElementById(`msg-${m._id}`);
+                                      if (el) {
+                                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        el.style.backgroundColor = 'var(--accent)';
+                                        setTimeout(() => {
+                                          el.style.backgroundColor = '';
+                                        }, 2000);
+                                      }
+                                    }}
+                                    style={{ padding: '8px', background: 'rgba(0,0,0,0.03)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                  >
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.75rem', marginBottom: '2px' }}>
+                                      {m.sender === user._id || m.sender?._id === user._id ? 'You' : (m.sender?.name || 'Member')}
+                                    </div>
+                                    <p style={{ margin: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{m.text || '[Attachment]'}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    /* Message Search Tab */
+                    <div>
+                      <div className="search-input-wrapper" style={{ margin: '10px 0' }}>
+                        <Search size={14} className="search-icon-fixed" />
+                        <input 
+                          type="text" 
+                          placeholder="Search messages..." 
+                          value={msgSearchQuery}
+                          onChange={async (e) => {
+                            const q = e.target.value;
+                            setMsgSearchQuery(q);
+                            if (q.trim().length > 0) {
+                              const results = await searchChatMessages(q);
+                              setMsgSearchResults(results);
+                            } else {
+                              setMsgSearchResults([]);
+                            }
+                          }}
+                          style={{ width: '100%' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1rem' }}>
+                        {msgSearchResults.length === 0 ? (
+                          <p style={{ textAlign: 'center', opacity: 0.6, fontSize: '0.85rem', marginTop: '2rem' }}>
+                            {msgSearchQuery.trim() ? 'No messages found matching search query.' : 'Type to search messages in this chat.'}
+                          </p>
+                        ) : (
+                          msgSearchResults.map(m => (
+                            <div 
+                              key={m._id} 
+                              className="search-result-item" 
+                              onClick={() => {
+                                const el = document.getElementById(`msg-${m._id}`);
+                                if (el) {
+                                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  el.style.backgroundColor = 'var(--accent)';
+                                  setTimeout(() => {
+                                    el.style.backgroundColor = '';
+                                  }, 2000);
+                                }
+                              }}
+                              style={{ padding: '10px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', cursor: 'pointer' }}
+                            >
+                              <div style={{ fontWeight: '600', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>{m.sender?.name || 'Member'}</span>
+                                <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>{new Date(m.createdAt).toLocaleDateString()}</span>
+                              </div>
+                              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--primary-dark)' }}>{m.text}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
+        </div>
         ) : (
           <div className="dashboard-empty">
             <Logo size={64} showText={false} />
@@ -986,6 +1349,49 @@ export default function Dashboard() {
                 {userSearchText.trim().length > 0 && userSearchResults.length === 0 && (
                   <li style={{ padding: '8px 16px', fontSize: '0.8rem', opacity: 0.5 }}>No users matched search criteria</li>
                 )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Forward Modal */}
+      {forwardingMsg && (
+        <div className="settings-overlay" style={{ zIndex: 999 }}>
+          <div className="settings-modal glass" style={{ width: '400px', height: '400px', flexDirection: 'column', padding: '1.5rem' }}>
+            <div className="flex-center" style={{ justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>
+              <h3>Forward Message</h3>
+              <button type="button" className="btn-close-modal" onClick={() => setForwardingMsg(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <p style={{ fontSize: '0.85rem', marginBottom: '10px', color: 'var(--text-secondary)' }}>Select a conversation to forward this message:</p>
+              <ul className="sidebar-list">
+                {conversations.map(c => {
+                  const target = c.type === 'direct' ? c.participants?.find(p => p.user?._id !== user._id) : null;
+                  const displayName = c.type === 'group' ? c.name : (target?.user?.name || 'Saved Space');
+                  const displayAvatar = c.type === 'group' 
+                    ? 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=150&q=80' 
+                    : (target?.user?.avatar?.url || target?.user?.avatar || '');
+                  return (
+                    <li 
+                      key={c._id} 
+                      className="sidebar-item" 
+                      onClick={async () => {
+                        await forwardMessage(forwardingMsg._id, [c._id]);
+                        setForwardingMsg(null);
+                      }}
+                      style={{ fontSize: '0.85rem', cursor: 'pointer' }}
+                    >
+                      <span className="sidebar-item-left">
+                        <img src={displayAvatar} alt={displayName} className="sidebar-avatar" />
+                        <span style={{ fontWeight: '600' }}>{displayName}</span>
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--secondary)' }}>Send</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>

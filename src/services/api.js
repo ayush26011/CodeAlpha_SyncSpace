@@ -4,6 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
 
 const apiClient = axios.create({
   baseURL: API_URL,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -25,9 +26,7 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Response error handler interceptor
@@ -37,14 +36,20 @@ apiClient.interceptors.response.use(
     if (error.isCustomAuthError) {
       return Promise.reject(error);
     }
-    const msg = error.response?.data?.error || error.message || 'API request error';
+    const status = error.response?.status;
+    const msg = error.response?.data?.error || error.response?.data?.message || error.message || 'API request error';
     const err = new Error(msg);
     if (error.response) {
-      err.status = error.response.status;
+      err.status = status;
       err.response = error.response;
+    }
+    // Timeout errors
+    if (error.code === 'ECONNABORTED') {
+      err.message = 'Request timed out — server is taking too long to respond';
     }
     return Promise.reject(err);
   }
 );
 
 export default apiClient;
+

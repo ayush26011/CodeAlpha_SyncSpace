@@ -9,28 +9,73 @@ import { useAuth } from './AuthContext';
 const ChatContext = createContext(null);
 
 export const ChatProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [conversations, setConversations] = useState([]);
   const [activeConversation, setActiveConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState({});
   const [onlineStatuses, setOnlineStatuses] = useState({});
   const [socket, setSocket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [socketConnecting, setSocketConnecting] = useState(false);
 
   // Initialize socket connection on login
   useEffect(() => {
     const token = localStorage.getItem('syncspace_token');
-    if (!user || !token) {
-      setSocket(null);
+    
+    if (authLoading) {
+      console.log("[Chat] Skipped: auth is loading.");
       return;
     }
+
+    if (!user || !token) {
+      console.log("[Chat] Skipped: no user or token.");
+      setSocket(null);
+      setLoading(false);
+      setSocketConnected(false);
+      setSocketConnecting(false);
+      return;
+    }
+
+    console.log("[Chat] Initialization started.");
+    setLoading(true);
+    setSocketConnecting(true);
 
     const socketCon = connectSocket(token);
     setSocket(socketCon);
 
-    socketCon.on('connect_error', (err) => {
-      console.warn("Socket connection error:", err.message);
+    if (socketCon.connected) {
+      console.log("[Socket] Already connected.");
+      setSocketConnected(true);
+      setSocketConnecting(false);
+    }
+
+    socketCon.on('connect', () => {
+      console.log("[Socket] Connected successfully");
+      setSocketConnected(true);
+      setSocketConnecting(false);
     });
+
+    socketCon.on('disconnect', () => {
+      console.log("[Socket] Disconnected");
+      setSocketConnected(false);
+      setSocketConnecting(false);
+    });
+
+    socketCon.on('connect_error', (err) => {
+      console.warn("[Socket] Connection error:", err.message);
+      setSocketConnected(false);
+      setSocketConnecting(false);
+    });
+
+    // 5s connection fallback
+    const connTimer = setTimeout(() => {
+      if (!socketCon.connected) {
+        console.log("[Socket] Connection timeout after 5s.");
+        setSocketConnecting(false);
+      }
+    }, 5000);
 
     socketCon.on('receive_message', ({ conversationId, message }) => {
       // Increment unread count locally if not active room
@@ -118,8 +163,29 @@ export const ChatProvider = ({ children }) => {
       setOnlineStatuses(prev => ({ ...prev, [userId]: 'offline' }));
     });
 
-    loadConversations();
-  }, [user]);
+    console.log("[Chat] Fetching conversations...");
+    loadConversations()
+      .catch(err => console.error("[Chat] Load conversations error:", err))
+      .finally(() => {
+        console.log("[Chat] chatLoading false");
+        setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(connTimer);
+      socketCon.off('connect');
+      socketCon.off('disconnect');
+      socketCon.off('connect_error');
+      socketCon.off('receive_message');
+      socketCon.off('typing');
+      socketCon.off('stop_typing');
+      socketCon.off('message_seen');
+      socketCon.off('reaction_added');
+      socketCon.off('reaction_removed');
+      socketCon.off('user_online');
+      socketCon.off('user_offline');
+    };
+  }, [user, authLoading]);
 
   // Join rooms and load messages on active conversation change
   useEffect(() => {
@@ -326,6 +392,89 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
+  const starMessage = async (messageId) => {
+    try {
+      const updated = await messageService.toggleStarMessage(messageId);
+      setMessages(prev => prev.map(m => m._id === messageId ? updated : m));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const forwardMessage = async (messageId, targetConversationIds) => {
+    try {
+      const newMsgs = await messageService.forwardMessage(messageId, targetConversationIds);
+      const socketCon = getSocket();
+      newMsgs.forEach(msg => {
+        if (socketCon) {
+          socketCon.emit('send_message', { conversationId: msg.conversation, message: msg });
+        }
+      });
+      loadConversations();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const searchChatMessages = async (q) => {
+    if (!activeConversation) return [];
+    const roomId = activeConversation._id || activeConversation.id;
+    try {
+      return await messageService.searchMessages(roomId, q);
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  };
+
+  const pinConversation = async (id) => {
+    try {
+      const updated = await conversationService.pinConversation(id);
+      setConversations(prev => prev.map(c => c._id === id ? updated : c));
+      if (activeConversation && activeConversation._id === id) {
+        setActiveConversation(updated);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const archiveConversation = async (id) => {
+    try {
+      const updated = await conversationService.archiveConversation(id);
+      setConversations(prev => prev.map(c => c._id === id ? updated : c));
+      if (activeConversation && activeConversation._id === id) {
+        setActiveConversation(updated);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const muteConversation = async (id) => {
+    try {
+      const updated = await conversationService.muteConversation(id);
+      setConversations(prev => prev.map(c => c._id === id ? updated : c));
+      if (activeConversation && activeConversation._id === id) {
+        setActiveConversation(updated);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const setChatWallpaper = async (id, wallpaper) => {
+    try {
+      const updated = await conversationService.updateWallpaper(id, wallpaper);
+      setConversations(prev => prev.map(c => c._id === id ? updated : c));
+      if (activeConversation && activeConversation._id === id) {
+        setActiveConversation(updated);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <ChatContext.Provider value={{
       conversations,
@@ -334,6 +483,9 @@ export const ChatProvider = ({ children }) => {
       messages,
       typingUsers,
       onlineStatuses,
+      loading,
+      socketConnected,
+      socketConnecting,
       startConversation,
       startGroupConversation,
       sendMessageText,
@@ -342,7 +494,14 @@ export const ChatProvider = ({ children }) => {
       deleteMessageById,
       toggleMessageReaction,
       sendTypingStatus,
-      loadConversations
+      loadConversations,
+      starMessage,
+      forwardMessage,
+      searchChatMessages,
+      pinConversation,
+      archiveConversation,
+      muteConversation,
+      setChatWallpaper
     }}>
       {children}
     </ChatContext.Provider>

@@ -10,7 +10,9 @@ export const connectSocket = (token) => {
     auth: {
       token
     },
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'],
+    reconnectionAttempts: 5,
+    timeout: 5000
   });
 
   return socket;

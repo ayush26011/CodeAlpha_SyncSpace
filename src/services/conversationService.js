@@ -27,3 +27,19 @@ export const addParticipants = (id, userIds) => {
 export const removeParticipant = (id, userId) => {
   return api.delete(`/conversations/${id}/participants/${userId}`);
 };
+
+export const pinConversation = (id) => {
+  return api.put(`/conversations/${id}/pin`);
+};
+
+export const archiveConversation = (id) => {
+  return api.put(`/conversations/${id}/archive`);
+};
+
+export const muteConversation = (id) => {
+  return api.put(`/conversations/${id}/mute`);
+};
+
+export const updateWallpaper = (id, wallpaper) => {
+  return api.put(`/conversations/${id}/wallpaper`, { wallpaper });
+};

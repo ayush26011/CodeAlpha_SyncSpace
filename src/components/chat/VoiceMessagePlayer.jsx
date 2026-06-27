@@ -4,10 +4,12 @@ import { Play, Pause } from 'lucide-react';
 export default function VoiceMessagePlayer({ url, duration }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const audioRef = useRef(null);
 
   useEffect(() => {
     audioRef.current = new Audio(url);
+    audioRef.current.playbackRate = playbackSpeed;
     
     const audio = audioRef.current;
     
@@ -30,6 +32,12 @@ export default function VoiceMessagePlayer({ url, duration }) {
     };
   }, [url]);
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
+
   const togglePlay = () => {
     if (isPlaying) {
       audioRef.current.pause();
@@ -46,6 +54,14 @@ export default function VoiceMessagePlayer({ url, duration }) {
     setCurrentTime(time);
   };
 
+  const toggleSpeed = () => {
+    setPlaybackSpeed(prev => {
+      if (prev === 1) return 1.5;
+      if (prev === 1.5) return 2;
+      return 1;
+    });
+  };
+
   const formatTime = (secs) => {
     const m = Math.floor(secs / 60).toString();
     const s = Math.floor(secs % 60).toString().padStart(2, '0');
@@ -55,7 +71,7 @@ export default function VoiceMessagePlayer({ url, duration }) {
   const displayDuration = duration || (audioRef.current ? audioRef.current.duration : 0) || 0;
 
   return (
-    <div className="voice-player-container" style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '220px', padding: '4px' }}>
+    <div className="voice-player-container" style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '250px', padding: '4px' }}>
       <button 
         type="button" 
         onClick={togglePlay} 
@@ -95,6 +111,24 @@ export default function VoiceMessagePlayer({ url, duration }) {
           <span>{formatTime(displayDuration)}</span>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={toggleSpeed}
+        style={{
+          background: 'rgba(0,0,0,0.06)',
+          border: 'none',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '0.75rem',
+          fontWeight: 'bold',
+          color: 'var(--primary-dark)',
+          cursor: 'pointer',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        {playbackSpeed}x
+      </button>
     </div>
   );
 }
