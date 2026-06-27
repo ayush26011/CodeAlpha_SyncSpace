@@ -1,0 +1,151 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Coastal Retreat Color Palette */
+  --primary-dark: #335765;
+  --secondary: #74A8A4;
+  --accent: #B6D9E0;
+  --background: #DBE2DC;
+  --highlight: #7F543D;
+  
+  /* Derivations & Utility Colors */
+  --primary-dark-rgb: 51, 87, 101;
+  --secondary-rgb: 116, 168, 164;
+  --accent-rgb: 182, 217, 224;
+  --background-rgb: 219, 226, 220;
+  --highlight-rgb: 127, 84, 61;
+  
+  --white: #ffffff;
+  --white-rgb: 255, 255, 255;
+  
+  --text-primary: var(--primary-dark);
+  --text-secondary: rgba(var(--primary-dark-rgb), 0.7);
+  --text-muted: rgba(var(--primary-dark-rgb), 0.45);
+  
+  --glass-bg: rgba(var(--white-rgb), 0.4);
+  --glass-bg-hover: rgba(var(--white-rgb), 0.65);
+  --glass-border: rgba(var(--primary-dark-rgb), 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(var(--primary-dark-rgb), 0.06);
+  
+  --shadow-sm: 0 2px 8px rgba(var(--primary-dark-rgb), 0.04);
+  --shadow-md: 0 4px 20px rgba(var(--primary-dark-rgb), 0.08);
+  --shadow-lg: 0 10px 30px rgba(var(--primary-dark-rgb), 0.12);
+  
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-headings: 'Outfit', 'Satoshi', 'General Sans', sans-serif;
+  
+  --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Base Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-ui);
+  background-color: var(--background);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-headings);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Custom Premium Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--primary-dark-rgb), 0.15);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--primary-dark-rgb), 0.3);
+}
+
+/* Utility Classes */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-interactive {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: all var(--transition-normal);
+}
+
+.glass-interactive:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(var(--primary-dark-rgb), 0.15);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Interactive Ripple effect simulations */
+.btn-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Custom Floating Blobs */
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: 0;
+  opacity: 0.45;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.blob-primary {
+  background: var(--accent);
+  width: 400px;
+  height: 400px;
+}
+
+.blob-secondary {
+  background: var(--secondary);
+  width: 300px;
+  height: 300px;
+}
+
+.blob-highlight {
+  background: var(--highlight);
+  width: 250px;
+  height: 250px;
+  opacity: 0.2;
+}
+
+/* Layout helpers */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
