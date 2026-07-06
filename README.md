@@ -6,7 +6,7 @@
 
 A modern full-stack communication platform built with **React, Node.js, MongoDB Atlas, Socket.IO, WebRTC & Cloudinary**, designed to deliver seamless messaging, voice/video calls, meetings, and real-time collaboration..
 
-.
+
 </div>
 
 ---
