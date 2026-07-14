@@ -27,7 +27,7 @@ https://syncspace-dfk4.onrender.com
 
 SyncSpace is a modern full-stack real-time communication platform inspired by today's best collaboration applications while maintaining its own unique SaaS identity.
 
-The platform enables users to communicate instantly through messaging, voice notes, voice calls, video calls, meetings, media sharing, and collaborative workspaces—all powered by real-time technologies.,
+The platform enables users to communicate instantly through messaging, voice notes, voice calls, video calls, meetings, media sharing, and collaborative workspaces—all powered by real-time technologies.
 
 ---
 
