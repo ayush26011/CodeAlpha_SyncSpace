@@ -34,7 +34,7 @@ The platform enables users to communicate instantly through messaging, voice not
 
 # 🚀 Features
 
-## 🔐 Authentication..
+## 🔐 Authentication
 
 - Secure JWT Authentication
 - User Registration
